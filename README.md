@@ -59,7 +59,7 @@ For detailed installation instructions, refer to the [Installation and Deploymen
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/warrenshiv/Co-Invest-Club.git
+   https://github.com/mukoyanichris/Co-Invest-Club.git
    ```
 2. Navigate to the working directory
    ```sh
