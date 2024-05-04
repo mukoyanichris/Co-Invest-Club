@@ -154,13 +154,13 @@ struct Club has key, store {
     id: UID,
     name: String,
     club_type: String,
-    rules: vector<u8>,
-    description: vector<u8>,
+    rules: String,
+    description: String,
     members: Table<address, Member>,
     investments: Table<address, Investment>,
     balance: Balance<SUI>,
     founding_date: u64,
-    status: vector<u8>,
+    status: String,
 }
 ```
 ### Member
@@ -194,10 +194,10 @@ struct Investment has copy, store, drop {
 - **Parameters**:
   - name: `String`
   - club_type: `String`
-  - description: `vector<u8>`
-  - rules: `vector<u8>`
+  - description: `String`
+  - rules: `String`
   - clock: `&Clock`
-  - open: `vector<u8>`
+  - open: `String`
   - ctx: `&mut TxContext`
 
 - **Description**: Initializes a new investment club with specified details and governance rules.

@@ -10,7 +10,7 @@ module co_invest_club::co_invest_club {
     use sui::table::{Self, Table};
     
     use std::string::{Self, String};
-    
+
     // Errors 
     const ERROR_INVALID_GENDER: u64 = 0;
     const ERROR_INVALID_ACCESS: u64 = 1;
@@ -25,12 +25,12 @@ module co_invest_club::co_invest_club {
         id: UID,
         name: String,
         club_type: String,
-        rules: vector<u8>,
-        description: vector<u8>,
+        rules: String,
+        description: String,
         investments: Table<address, Investment>,
         balance: Balance<SUI>,
         founding_date: u64,
-        status: vector<u8>,
+        status: String,
     }
     
     // struct that represent Club Capability
@@ -60,7 +60,7 @@ module co_invest_club::co_invest_club {
     }
 
     // Create a new Club
-    public fun create_club(name: String, club_type: String, description: vector<u8>, rules: vector<u8>, clock: &Clock, open: vector<u8>, ctx: &mut TxContext): (Club, ClubCap) {
+    public fun create_club(name: String, club_type: String, description: String, rules: String, clock: &Clock, open: String, ctx: &mut TxContext): (Club, ClubCap) {
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
         let club = Club {
