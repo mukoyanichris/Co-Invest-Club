@@ -9,16 +9,7 @@ module co_invest_club::co_invest_club {
     use sui::coin::{Self, Coin};
     use sui::table::{Self, Table};
     
-    use std::string::{String};
-    
-    // Gender Constants
-    const MALE: u8 = 0;
-    const FEMALE: u8 = 1;
-
-    // Status Constants
-    const PENDING: u8 = 0;
-    const PAID: u8 = 1;
-    const OVERDUE: u8 = 2;
+    use std::string::{Self, String};
     
     // Errors 
     const ERROR_INVALID_GENDER: u64 = 0;
@@ -36,7 +27,6 @@ module co_invest_club::co_invest_club {
         club_type: String,
         rules: vector<u8>,
         description: vector<u8>,
-        members: Table<address, Member>,
         investments: Table<address, Investment>,
         balance: Balance<SUI>,
         founding_date: u64,
@@ -54,7 +44,7 @@ module co_invest_club::co_invest_club {
         id: UID,
         club_id: ID,
         name: String,
-        gender: u8,
+        gender: String,
         contact_info: String,
         number_of_shares: u64,
         pay: bool,
@@ -66,7 +56,7 @@ module co_invest_club::co_invest_club {
         member_id: ID,
         amount_payable: u64,
         payment_date: u64,
-        status: u8,
+        status: String,
     }
 
     // Create a new Club
@@ -81,7 +71,6 @@ module co_invest_club::co_invest_club {
             rules,
             status: open,
             founding_date: clock::timestamp_ms(clock),
-            members: table::new(ctx),
             investments: table::new(ctx),
             balance: balance::zero()
         };
@@ -95,8 +84,8 @@ module co_invest_club::co_invest_club {
     }
     
     // Add a member to the club
-    public fun add_member(club_id: ID, name: String, gender: u8, contact_info: String, number_of_shares: u64, clock: &Clock, ctx: &mut TxContext): Member {
-        assert!(gender == MALE || gender == FEMALE, ERROR_INVALID_GENDER);
+    public fun new_member(club_id: ID, name: String, gender: String, contact_info: String, number_of_shares: u64, clock: &Clock, ctx: &mut TxContext): Member {
+        assert!(gender == string::utf8(b"MALE") || gender == string::utf8(b"FAMALE"), ERROR_INVALID_GENDER);        
         Member {
             id: object::new(ctx),
             club_id,
@@ -110,15 +99,12 @@ module co_invest_club::co_invest_club {
     }
     
     // Generate investment amount for a member
-    public fun generate_investment_amount(cap: &ClubCap, club: &mut Club, member: &Member, member_id: ID, amount_payable: u64, status: u8, date: u64, clock: &Clock, ctx: &mut TxContext) {
+    public fun generate_investment_amount(cap: &ClubCap, club: &mut Club, member: &Member, member_id: ID, amount_payable: u64, status: String, date: u64, clock: &Clock, ctx: &mut TxContext) {
         assert!(cap.club_id == object::id(club), ERROR_INVALID_ACCESS);
-        
         // Accessing number of shares from the Member struct
         let shares = member.number_of_shares;
-        
         // Calculate the total amount payable based on the number of shares
         let total_amount_payable = amount_payable * shares;
-        
         let investment = Investment {
             member_id,
             amount_payable: total_amount_payable,  // Use the adjusted total amount
@@ -130,9 +116,6 @@ module co_invest_club::co_invest_club {
     
     // Function for member to pay investment
     public fun pay_investment(club: &mut Club, investment: &mut Investment, member: &mut Member, coin: Coin<SUI>, clock: &Clock, ctx: &mut TxContext) {
-        // Ensure the investment is not already paid or canceled
-        assert!(investment.status == PENDING || investment.status == OVERDUE, ERROR_INVESTMET_ALREADY_PAID);
-        
         let investment = table::remove(&mut club.investments, sender(ctx));
         assert!(coin::value(&coin) == investment.amount_payable, ERROR_INSUFFICIENT_FUNDS);
         assert!(investment.payment_date < clock::timestamp_ms(clock), ERROR_INVALID_TIME);
@@ -142,7 +125,6 @@ module co_invest_club::co_invest_club {
         balance::join(&mut club.balance, balance_);
         // Investment Status
         member.pay = true;
-        investment.status = PAID;
     }
     
     // Function to withdraw funds from the club
@@ -159,7 +141,7 @@ module co_invest_club::co_invest_club {
     }
     
     // Function to check the payment and investment status of a member
-    public fun check_member_and_investment_status(member: &Member, investment: &Investment) : (bool, u8) {
+    public fun check_member_and_investment_status(member: &Member, investment: &Investment) : (bool, String) {
         (member.pay, investment.status)
     }
 
