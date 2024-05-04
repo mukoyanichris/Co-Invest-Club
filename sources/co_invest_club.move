@@ -44,11 +44,11 @@ module co_invest_club::co_invest_club {
     struct Member has key, store {
         id: UID,
         club_id: ID,
+        owner: address,
         name: String,
         gender: String,
         contact_info: String,
         sub_count: u64,
-        pay: bool,
         date_joined: u64
     }
 
@@ -57,6 +57,7 @@ module co_invest_club::co_invest_club {
         member_id: ID,
         amount_payable: u64,
         payment_date: u64,
+        pay: bool
     }
 
     // Create a new Club
@@ -93,28 +94,30 @@ module co_invest_club::co_invest_club {
 
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
+        let addr = object::uid_to_address(&id_);
         let member = Member {
             id: id_,
             club_id: object::id(self),
+            owner: addr,
             name,
             gender,
             contact_info,
             sub_count: 1,
             date_joined: clock::timestamp_ms(clock),
-            pay: true
         };
         let investment = Investment {
             member_id: inner_,
             amount_payable: amount,
-            payment_date: clock::timestamp_ms(clock)
+            payment_date: clock::timestamp_ms(clock),
+            pay: true
         };
-        table::add(&mut self.investments, sender(ctx), investment);
+        table::add(&mut self.investments, addr, investment);
         member
     }
     
     // Function for member to re investment
-    public fun pay_investment(self: &mut Club, investment: &mut Investment, member: &mut Member, coin: Coin<SUI>, clock: &Clock, ctx: &mut TxContext) {
-        let investment = table::borrow_mut(&mut self.investments, sender(ctx));
+    public fun pay_investment(self: &mut Club, investment: &mut Investment, member: &mut Member, coin: Coin<SUI>, clock: &Clock) {
+        let investment = table::borrow_mut(&mut self.investments, member.owner);
         let amount = coin::value(&coin);
         assert!(amount == investment.amount_payable, ERROR_INSUFFICIENT_FUNDS);
         assert!(investment.payment_date < clock::timestamp_ms(clock), ERROR_INVALID_TIME);
@@ -124,7 +127,8 @@ module co_invest_club::co_invest_club {
         balance::join(&mut self.balance, balance_);
         // Investment Status
         investment.amount_payable = investment.amount_payable + amount;
-        member.pay = true;
+        investment.payment_date = clock::timestamp_ms(clock);
+        investment.pay = true;
         member.sub_count = member.sub_count + 1;
     }
     
@@ -134,6 +138,12 @@ module co_invest_club::co_invest_club {
         let balance_ = balance::withdraw_all(&mut club.balance);
         let coin_ = coin::from_balance(balance_, ctx);
         coin_
+    }
+
+    public fun disable_member(cap: &ClubCap, self: &mut Club, c: &Clock, member: address) {
+        let investment = table::borrow_mut(&mut self.investments, member);
+        assert!(investment.payment_date > clock::timestamp_ms(c), ERROR_INVALID_TIME);
+        investment.pay = false;
     }
     
     // Function to get the total balance of the club
