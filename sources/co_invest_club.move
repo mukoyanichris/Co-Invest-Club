@@ -9,17 +9,8 @@ module co_invest_club::co_invest_club {
     use sui::coin::{Self, Coin};
     use sui::table::{Self, Table};
     
-    use std::string::{String};
-    
-    // Gender Constants
-    const MALE: u8 = 0;
-    const FEMALE: u8 = 1;
+    use std::string::{Self, String};
 
-    // Status Constants
-    const PENDING: u8 = 0;
-    const PAID: u8 = 1;
-    const OVERDUE: u8 = 2;
-    
     // Errors 
     const ERROR_INVALID_GENDER: u64 = 0;
     const ERROR_INVALID_ACCESS: u64 = 1;
@@ -34,13 +25,13 @@ module co_invest_club::co_invest_club {
         id: UID,
         name: String,
         club_type: String,
-        rules: vector<u8>,
-        description: vector<u8>,
-        members: Table<address, Member>,
+        rules: String,
+        description: String,
         investments: Table<address, Investment>,
         balance: Balance<SUI>,
+        sub_price: u64,
         founding_date: u64,
-        status: vector<u8>,
+        status: String,
     }
     
     // struct that represent Club Capability
@@ -53,11 +44,11 @@ module co_invest_club::co_invest_club {
     struct Member has key, store {
         id: UID,
         club_id: ID,
+        owner: address,
         name: String,
-        gender: u8,
+        gender: String,
         contact_info: String,
-        number_of_shares: u64,
-        pay: bool,
+        sub_count: u64,
         date_joined: u64
     }
 
@@ -66,11 +57,11 @@ module co_invest_club::co_invest_club {
         member_id: ID,
         amount_payable: u64,
         payment_date: u64,
-        status: u8,
+        pay: bool
     }
 
     // Create a new Club
-    public fun create_club(name: String, club_type: String, description: vector<u8>, rules: vector<u8>, clock: &Clock, open: vector<u8>, ctx: &mut TxContext): (Club, ClubCap) {
+    public fun create_club(name: String, club_type: String, description: String, rules: String, sub: u64, open: String, c: &Clock, ctx: &mut TxContext): (Club, ClubCap) {
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
         let club = Club {
@@ -80,10 +71,10 @@ module co_invest_club::co_invest_club {
             description,
             rules,
             status: open,
-            founding_date: clock::timestamp_ms(clock),
-            members: table::new(ctx),
+            founding_date: clock::timestamp_ms(c),
+            sub_price: sub,
             investments: table::new(ctx),
-            balance: balance::zero()
+            balance: balance::zero(),
         };
 
         let cap = ClubCap {
@@ -95,54 +86,50 @@ module co_invest_club::co_invest_club {
     }
     
     // Add a member to the club
-    public fun add_member(club_id: ID, name: String, gender: u8, contact_info: String, number_of_shares: u64, clock: &Clock, ctx: &mut TxContext): Member {
-        assert!(gender == MALE || gender == FEMALE, ERROR_INVALID_GENDER);
-        Member {
-            id: object::new(ctx),
-            club_id,
+    public fun new_member(self: &mut Club, name: String, gender: String, contact_info: String, coin: Coin<SUI>, clock: &Clock, ctx: &mut TxContext): Member {
+        let amount = coin::value(&coin);
+        assert!(amount == self.sub_price, ERROR_INSUFFICIENT_FUNDS);
+        assert!(gender == string::utf8(b"MALE") || gender == string::utf8(b"FAMALE"), ERROR_INVALID_GENDER);
+        coin::put(&mut self.balance, coin);
+
+        let id_ = object::new(ctx);
+        let inner_ = object::uid_to_inner(&id_);
+        let addr = object::uid_to_address(&id_);
+        let member = Member {
+            id: id_,
+            club_id: object::id(self),
+            owner: addr,
             name,
             gender,
             contact_info,
-            number_of_shares,
+            sub_count: 1,
             date_joined: clock::timestamp_ms(clock),
-            pay: false
-        }
-    }
-    
-    // Generate investment amount for a member
-    public fun generate_investment_amount(cap: &ClubCap, club: &mut Club, member: &Member, member_id: ID, amount_payable: u64, status: u8, date: u64, clock: &Clock, ctx: &mut TxContext) {
-        assert!(cap.club_id == object::id(club), ERROR_INVALID_ACCESS);
-        
-        // Accessing number of shares from the Member struct
-        let shares = member.number_of_shares;
-        
-        // Calculate the total amount payable based on the number of shares
-        let total_amount_payable = amount_payable * shares;
-        
-        let investment = Investment {
-            member_id,
-            amount_payable: total_amount_payable,  // Use the adjusted total amount
-            status,
-            payment_date: clock::timestamp_ms(clock) + date,
         };
-        table::add(&mut club.investments, sender(ctx), investment);
+        let investment = Investment {
+            member_id: inner_,
+            amount_payable: amount,
+            payment_date: clock::timestamp_ms(clock),
+            pay: true
+        };
+        table::add(&mut self.investments, addr, investment);
+        member
     }
     
-    // Function for member to pay investment
-    public fun pay_investment(club: &mut Club, investment: &mut Investment, member: &mut Member, coin: Coin<SUI>, clock: &Clock, ctx: &mut TxContext) {
-        // Ensure the investment is not already paid or canceled
-        assert!(investment.status == PENDING || investment.status == OVERDUE, ERROR_INVESTMET_ALREADY_PAID);
-        
-        let investment = table::remove(&mut club.investments, sender(ctx));
-        assert!(coin::value(&coin) == investment.amount_payable, ERROR_INSUFFICIENT_FUNDS);
+    // Function for member to re investment
+    public fun pay_investment(self: &mut Club, investment: &mut Investment, member: &mut Member, coin: Coin<SUI>, clock: &Clock) {
+        let investment = table::borrow_mut(&mut self.investments, member.owner);
+        let amount = coin::value(&coin);
+        assert!(amount == investment.amount_payable, ERROR_INSUFFICIENT_FUNDS);
         assert!(investment.payment_date < clock::timestamp_ms(clock), ERROR_INVALID_TIME);
         
         // Add the coin to the club balance
         let balance_ = coin::into_balance(coin);
-        balance::join(&mut club.balance, balance_);
+        balance::join(&mut self.balance, balance_);
         // Investment Status
-        member.pay = true;
-        investment.status = PAID;
+        investment.amount_payable = investment.amount_payable + amount;
+        investment.payment_date = clock::timestamp_ms(clock);
+        investment.pay = true;
+        member.sub_count = member.sub_count + 1;
     }
     
     // Function to withdraw funds from the club
@@ -152,15 +139,15 @@ module co_invest_club::co_invest_club {
         let coin_ = coin::from_balance(balance_, ctx);
         coin_
     }
+
+    public fun disable_member(cap: &ClubCap, self: &mut Club, c: &Clock, member: address) {
+        let investment = table::borrow_mut(&mut self.investments, member);
+        assert!(investment.payment_date > clock::timestamp_ms(c), ERROR_INVALID_TIME);
+        investment.pay = false;
+    }
     
     // Function to get the total balance of the club
     public fun get_balance(club: &Club) : u64 {
         balance::value(&club.balance)
     }
-    
-    // Function to check the payment and investment status of a member
-    public fun check_member_and_investment_status(member: &Member, investment: &Investment) : (bool, u8) {
-        (member.pay, investment.status)
-    }
-
 }
